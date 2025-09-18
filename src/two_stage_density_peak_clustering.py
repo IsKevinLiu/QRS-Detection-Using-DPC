@@ -150,12 +150,13 @@ class TwoStageDPC:
                 elif i == int(N / self._win_size) - 1:
                     _delta, _pointer = self._cal_distance(rho[int(i * self._win_size - self._edge):])
                     delta[i * self._win_size:] = _delta[self._edge:]
-                    pointer[i * self._win_size:] = _pointer[self._edge:]
+                    pointer[i * self._win_size:] = _pointer[self._edge:] + max(0, i * self._win_size - self._edge)
                 else:
                     _delta, _pointer = self._cal_distance(
                         rho[int(i * self._win_size - self._edge):int((i + 1) * self._win_size + self._edge)])
                     delta[i * self._win_size:(i + 1) * self._win_size] = _delta[self._edge:-self._edge]
-                    pointer[i * self._win_size:(i + 1) * self._win_size] = _pointer[self._edge:-self._edge]
+                    pointer[i * self._win_size:(i + 1) * self._win_size] = _pointer[self._edge:-self._edge] + max(0,
+                                                                                                                  i * self._win_size - self._edge)
         else:
             delta, pointer = self._cal_distance(rho)
         self.params = self.Params(rho=rho, delta=delta, pointer=pointer)
@@ -264,12 +265,21 @@ class TwoStageDPC:
     def clustering(self):
         # sort_rho = np.sort(self.params.rho)
         sort_idx = np.argsort(-self.params.rho)
-        cluster = np.zeros(len(self.signal), dtype=int)
+        cluster = np.full(len(self.signal), fill_value=-1, dtype=int)
         for c, peak in enumerate(self.centers):
             cluster[peak] = int(c + 1)
-        for i in tqdm.tqdm(sort_idx[1:], desc='Clustering'):
-            if cluster[i] == 0:
+        for i in tqdm.tqdm(sort_idx[:], desc='Clustering'):
+            if cluster[i] == -1:
                 cluster[i] = cluster[self.params.pointer[i]]
+
+        idx = np.where(cluster == -1)[0]
+        counter = 0
+        while np.any(idx):
+            cluster[idx] = cluster[self.params.pointer[idx]]
+            idx = np.where(cluster == -1)[0]
+            counter += 1
+            if counter > 100:
+                break
         self.cluster = cluster
 
     def plot_decide(
